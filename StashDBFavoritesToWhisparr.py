@@ -19,6 +19,10 @@ error_log.addHandler(error_handler)
 # Environment Variables
 STASHDB_APIKEY = os.getenv('STASHDB_APIKEY')
 WHISPARR_APIKEY = os.getenv('WHISPARR_APIKEY')
+ROOT_FOLDER_PATH = os.getenv('ROOT_FOLDER_PATH')
+MONITORED = os.getenv('MONITORED')
+SEARCH_ON_ADD = os.getenv('SEARCH_ON_ADD')
+QUALITY_PROFILE = os.getenv('QUALITY_PROFILE')
 
 STASHDB_ENDPOINT = 'https://stashdb.org/graphql'
 WHISPARR_ENDPOINT = 'http://whisparr.home/api/v3/performer'
@@ -103,10 +107,10 @@ def transform_performer_data(performer_data, id_counter):
                     "remoteURL": img['Url']
                 } for img in performer_data['Images']
             ],
-            "monitored": True,
-            "rootFolderPath": "/data/media/videos/",
-            "qualityProfileId": 4,
-            "searchOnAdd": True,
+            "monitored": MONITORED,
+            "rootFolderPath": ROOT_FOLDER_PATH,
+            "qualityProfileId": QUALITY_PROFILE,
+            "searchOnAdd": SEARCH_ON_ADD,
             "tags": [],
             "added": "0001-01-01T07:53:00Z",
             "id": id_counter
