@@ -20,8 +20,8 @@ error_log.addHandler(error_handler)
 STASHDB_APIKEY = os.getenv('STASHDB_APIKEY')
 WHISPARR_APIKEY = os.getenv('WHISPARR_APIKEY')
 ROOT_FOLDER_PATH = os.getenv('ROOT_FOLDER_PATH')
-MONITORED = os.getenv('MONITORED')
-SEARCH_ON_ADD = os.getenv('SEARCH_ON_ADD')
+MONITORED = os.getenv('MONITORED') or False
+SEARCH_ON_ADD = os.getenv('SEARCH_ON_ADD') or False
 QUALITY_PROFILE = os.getenv('QUALITY_PROFILE')
 
 STASHDB_ENDPOINT = 'https://stashdb.org/graphql'
