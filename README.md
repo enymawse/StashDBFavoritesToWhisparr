@@ -38,9 +38,13 @@ pip install -r requirements.txt
    ```env
    STASHDB_APIKEY=your-stashdb-apikey
    WHISPARR_APIKEY=your-whisparr-apikey
+   ROOT_FOLDER_PATH=/location/of/your/media
+   MONITORED=True
+   SEARCH_ON_ADD=True
+   QUALITY_PROFILE=4
    ```
 
-   Replace `your-stashdb-apikey` and `your-whisparr-apikey` with your actual API keys.
+   Replace `your-stashdb-apikey` and `your-whisparr-apikey` with your actual API keys. Replace `/location/of/your/media` with the location of your root folder. If you don't set `MONITORED` or `SEARCH_ON_ADD` they default to `False` which will simply add the performer and not monitor or search when added. Consult the [Whisparr Wiki](https://wiki.servarr.com/en/whisparr) for more details.
 
 3. Install the required Python libraries:
    ```bash
@@ -60,7 +64,7 @@ pip install -r requirements.txt
 3. Once the script completes, it will print a summary:
 
    ```
-   Import complete: X successful, Y failed.
+   Import complete: X successful, Y already imported, Z failed.
    ```
 
 4. Check the log files for additional details:
@@ -72,7 +76,13 @@ pip install -r requirements.txt
 ```env
 STASHDB_APIKEY=abc123def456
 WHISPARR_APIKEY=xyz789ghi012
+ROOT_FOLDER_PATH=/location/of/your/media
+MONITORED=True
+SEARCH_ON_ADD=True
+QUALITY_PROFILE=4
 ```
+
+Quick note about `QUALITY_PROFILE`: This `int` comes from a `GET` request to your Whisparr instance `{{baseurl}}/api/v3/qualityprofile`. Check out the Whisparr [API Docs](https://whisparr.com/docs/api/) for more info.
 
 ## How It Works
 
