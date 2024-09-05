@@ -20,7 +20,7 @@ STASHDB_APIKEY = os.getenv('STASHDB_APIKEY')
 WHISPARR_APIKEY = os.getenv('WHISPARR_APIKEY')
 
 STASHDB_ENDPOINT = 'https://stashdb.org/graphql'
-WHISPARR_ENDPOINT = 'https://whisparr.home/api/v3/performer'
+WHISPARR_ENDPOINT = 'http://whisparr.home/api/v3/performer'
 HEADERS_STASHDB = {
     'ApiKey': f'{STASHDB_APIKEY}',
     'Content-Type': 'application/json'
@@ -71,6 +71,14 @@ def fetch_whisparr_performer(stashid):
         error_log.error(f"Error fetching performer from Whisparr: {response.status_code}, {response.text}")
         return None
 
+def get_performer_status(status):
+    if status == 0:
+        return "active"
+    elif status == 1:
+        return "inactive"
+    else:
+        return "unknown"
+
 # Transform the Whisparr data into the desired format
 def transform_performer_data(performer_data, id_counter):
     if performer_data:
@@ -79,7 +87,7 @@ def transform_performer_data(performer_data, id_counter):
             "Gender": performer_data['Gender'],
             "HairColor": performer_data['HairColor'],
             "Ethnicity": performer_data['Ethnicity'],
-            "Status": "active" if performer_data['Status'] == 0 else "retired",
+            "Status": get_performer_status(performer_data['Status']),
             "CareerStart": performer_data.get('CareerStart', None),
             "foreignId": performer_data['ForeignIds']['StashId'],
             "Images": [
@@ -100,25 +108,38 @@ def transform_performer_data(performer_data, id_counter):
     return None
 
 # Send transformed performer data to Whisparr
-def send_to_whisparr(data, fail_ids):
+def send_to_whisparr(data, fail_ids, already_imported):
     response = requests.post(WHISPARR_ENDPOINT, headers=HEADERS_WHISPARR, json=data)
     if response.status_code == 201:
         logging.info(f"Successfully added performer: {data['fullName']}")
         return True
     elif response.status_code == 409:
         error_response = response.json()
-        if error_response["message"]:
-            logging.error(f"Conflict posting performer to Whisparr: {response.status_code}, {error_response["message"]}")
+        error_response_message = error_response["message"]
+        if "UNIQUE constraint failed: Performers.ForeignId" in error_response_message:
+            logging.info(f"Performer already exists: { data['fullName'] }")
+            already_imported.append(
+                {
+                   "id": data['foreignId'],
+                   "name" : data['fullName']
+                }
+            )
+        else:
+            error_log.error(f"Conflict posting performer to Whisparr: {response.status_code}, {error_response_message}")
     else:
         error_log.error(f"Error posting performer to Whisparr: {response.status_code}, {response.text}")
-        fail_ids.append({ "id" : data['foreignId']})
+        fail_ids.append(
+            {
+                "id" : data['foreignId']
+            }
+        )
         return False
 
 # Main process
 def main():
     performers = fetch_favorites()
     success_count = 0
-    fail_count = 0
+    already_imported = []
     fail_ids = []
     id_counter = 1
 
@@ -127,14 +148,12 @@ def main():
         whisparr_data = fetch_whisparr_performer(stashid)
         if whisparr_data:
             transformed_data = transform_performer_data(whisparr_data, id_counter)
-            if transformed_data and send_to_whisparr(transformed_data, fail_ids):
+            if transformed_data and send_to_whisparr(transformed_data, fail_ids, already_imported):
                 success_count += 1
-            else:
-                fail_count += 1
             id_counter += 1
 
-    print(f"Import complete: {success_count} successful, {fail_count} failed.")
-    if fail_ids.count() > 0:
+    print(f"Import complete: {success_count} successful, {len(already_imported)} already imported, {len(fail_ids)} failed.\nTotal: {success_count + len(already_imported) + len(fail_ids)}")
+    if len(fail_ids) > 0:
         for failedId in fail_ids:
             error_log.error(f"Failed: {failedId}")
 
