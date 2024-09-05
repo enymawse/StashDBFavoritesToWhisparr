@@ -1,6 +1,5 @@
 import os
 import requests
-import json
 import logging
 from dotenv import load_dotenv
 
@@ -9,6 +8,8 @@ load_dotenv()
 
 # Set up logging
 logging.basicConfig(filename='StashDBFavoritesToWhisparr.log', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Error logging
 error_log = logging.getLogger('error')
 error_log.setLevel(logging.ERROR)
 error_handler = logging.FileHandler('StashDBFavoritesToWhisparr_errors.log')
@@ -21,8 +22,9 @@ WHISPARR_APIKEY = os.getenv('WHISPARR_APIKEY')
 
 STASHDB_ENDPOINT = 'https://stashdb.org/graphql'
 WHISPARR_ENDPOINT = 'http://whisparr.home/api/v3/performer'
+
 HEADERS_STASHDB = {
-    'ApiKey': f'{STASHDB_APIKEY}',
+    'ApiKey': STASHDB_APIKEY,
     'Content-Type': 'application/json'
 }
 HEADERS_WHISPARR = {
@@ -31,7 +33,7 @@ HEADERS_WHISPARR = {
 }
 
 # GraphQL query to get favorite performers
-query = '''
+QUERY_PERFORMERS = '''
 query GetFavoritePerformers($page: Int!) {
     queryPerformers(input: { is_favorite: true, per_page: 100, page: $page }) {
         count
@@ -42,27 +44,31 @@ query GetFavoritePerformers($page: Int!) {
 }
 '''
 
-# Fetch favorite performers from StashDB with pagination
 def fetch_favorites():
+    """
+    Fetch favorite performers from StashDB with pagination.
+    """
     performers = []
     page = 1
     while True:
         variables = {'page': page}
-        response = requests.post(STASHDB_ENDPOINT, headers=HEADERS_STASHDB, json={'query': query, 'variables': variables})
+        response = requests.post(STASHDB_ENDPOINT, headers=HEADERS_STASHDB, json={'query': QUERY_PERFORMERS, 'variables': variables})
         
         if response.status_code == 200:
             data = response.json()['data']['queryPerformers']
             performers.extend(data['performers'])
-            if len(data['performers']) < 100:  # If fewer than 100 performers are returned, we've reached the last page
+            if len(data['performers']) < 100:
                 break
-            page += 1  # Move to the next page
+            page += 1
         else:
             error_log.error(f"Error fetching favorites: {response.status_code}, {response.text}")
             break
     return performers
 
-# Fetch performer data from Whisparr using stashid
 def fetch_whisparr_performer(stashid):
+    """
+    Fetch performer data from Whisparr using StashID.
+    """
     url = f'https://api.whisparr.com/v4/performer/{stashid}'
     response = requests.get(url)
     if response.status_code == 200:
@@ -72,15 +78,15 @@ def fetch_whisparr_performer(stashid):
         return None
 
 def get_performer_status(status):
-    if status == 0:
-        return "active"
-    elif status == 1:
-        return "inactive"
-    else:
-        return "unknown"
+    """
+    Convert Whisparr status to readable format.
+    """
+    return "active" if status == 0 else "inactive" if status == 1 else "unknown"
 
-# Transform the Whisparr data into the desired format
 def transform_performer_data(performer_data, id_counter):
+    """
+    Transform the Whisparr performer data into the desired format for import.
+    """
     if performer_data:
         return {
             "fullName": performer_data['Name'],
@@ -88,7 +94,7 @@ def transform_performer_data(performer_data, id_counter):
             "HairColor": performer_data['HairColor'],
             "Ethnicity": performer_data['Ethnicity'],
             "Status": get_performer_status(performer_data['Status']),
-            "CareerStart": performer_data.get('CareerStart', None),
+            "CareerStart": performer_data.get('CareerStart'),
             "foreignId": performer_data['ForeignIds']['StashId'],
             "Images": [
                 {
@@ -107,36 +113,30 @@ def transform_performer_data(performer_data, id_counter):
         }
     return None
 
-# Send transformed performer data to Whisparr
 def send_to_whisparr(data, fail_ids, already_imported):
+    """
+    Send transformed performer data to Whisparr and handle errors.
+    """
     response = requests.post(WHISPARR_ENDPOINT, headers=HEADERS_WHISPARR, json=data)
     if response.status_code == 201:
         logging.info(f"Successfully added performer: {data['fullName']}")
         return True
     elif response.status_code == 409:
-        error_response = response.json()
-        error_response_message = error_response["message"]
-        if "UNIQUE constraint failed: Performers.ForeignId" in error_response_message:
-            logging.info(f"Performer already exists: { data['fullName'] }")
-            already_imported.append(
-                {
-                   "id": data['foreignId'],
-                   "name" : data['fullName']
-                }
-            )
+        error_message = response.json().get("message", "")
+        if "UNIQUE constraint failed: Performers.ForeignId" in error_message:
+            logging.info(f"Performer already exists: {data['fullName']}")
+            already_imported.append({"id": data['foreignId'], "name": data['fullName']})
         else:
-            error_log.error(f"Conflict posting performer to Whisparr: {response.status_code}, {error_response_message}")
+            error_log.error(f"Conflict posting performer to Whisparr: {response.status_code}, {error_message}")
     else:
         error_log.error(f"Error posting performer to Whisparr: {response.status_code}, {response.text}")
-        fail_ids.append(
-            {
-                "id" : data['foreignId']
-            }
-        )
+        fail_ids.append({"id": data['foreignId']})
         return False
 
-# Main process
 def main():
+    """
+    Main function to fetch and import performers from StashDB to Whisparr.
+    """
     performers = fetch_favorites()
     success_count = 0
     already_imported = []
@@ -152,10 +152,11 @@ def main():
                 success_count += 1
             id_counter += 1
 
-    print(f"Import complete: {success_count} successful, {len(already_imported)} already imported, {len(fail_ids)} failed.\nTotal: {success_count + len(already_imported) + len(fail_ids)}")
-    if len(fail_ids) > 0:
-        for failedId in fail_ids:
-            error_log.error(f"Failed: {failedId}")
+    # Log final report
+    print(f"Import complete: {success_count} successful, {len(already_imported)} already imported, {len(fail_ids)} failed.")
+    if fail_ids:
+        for failed_id in fail_ids:
+            error_log.error(f"Failed: {failed_id}")
 
 if __name__ == "__main__":
     main()
